@@ -9,12 +9,13 @@ from time import sleep
 def login():
 
     url='https://prettyrecon.com/api/v1/login'
-    burp0_data = {"remember": "false", "email": email, "password": password}
-    s.post(url, headers=headers, data=burp0_data)
+    logindata = {"remember": "false", "email": email, "password": password}
+    s.post(url, headers=headers, data=logindata)
     sleep(2)
 
 def job():
 
+    jobs='https://prettyrecon.com/target/running-jobs'
     status=True
     while True:
         if status == True:
@@ -35,11 +36,11 @@ def sub():
     targetinfo=baseurl+'/info'
     subinfo=baseurl+'/subinfo'
     s.get(targetinfo, headers=headers)
-    sleep(5)
-    text = s.get(subinfo, headers=headers).content
+    sleep(1)
+    subreq = s.get(subinfo, headers=headers)
     if args.output is not None:
         job()
-        soup = BeautifulSoup(text, "html.parser")
+        soup = BeautifulSoup(subreq.content, "html.parser")
         scripts = (soup.find_all('script')[10].string.strip()[24:-2733]).encode().decode('unicode-escape')
         open(os.path.join(target, "subdomains.json"), 'w').write(scripts)
 
@@ -53,10 +54,10 @@ def basic():
 
     print("DNS Info...")
     dnsreq = s.get(dnsinfo, headers=headers)
-    sleep(5)
+    sleep(1)
     print("Port Scan...")
     portreq = s.get(ports, headers=headers)
-    sleep(5)
+    sleep(1)
     print("Waybackurls...")
     s.get(urls, headers=headers)
     if args.output is not None:
@@ -81,16 +82,16 @@ def vuln():
 
     print("Subdomain Takeover...")
     subtkoreq = s.get(subtko, headers=headers)
-    sleep(5)
+    sleep(1)
     print("Scanning for CVE's...")
     cvereq = s.get(cve, headers=headers)
-    sleep(5)
+    sleep(1)
     print("Scanning for common vulnerabilities...")
     commonreq = s.get(common, headers=headers)
-    sleep(5)
+    sleep(1)
     print("Scanning for exposed secrets...")
     exposedreq = s.get(exposed, headers=headers)
-    sleep(5)
+    sleep(1)
     print("Scanning for security misconfigurations...")
     miscreq = s.get(miscofig, headers=headers)
     if args.output is not None:
@@ -149,7 +150,6 @@ if __name__ == '__main__':
     type = args.scan_type
     s = requests.Session()
     baseurl='https://prettyrecon.com/target/'+target
-    jobs='https://prettyrecon.com/target/running-jobs'
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
     if args.output is not None:
         if not os.path.exists(target):
