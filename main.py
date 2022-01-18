@@ -10,7 +10,15 @@ def login():
 
     url='https://prettyrecon.com/api/v1/login'
     logindata = {"remember": "false", "email": email, "password": password}
-    s.post(url, headers=headers, data=logindata)
+    loginreq = s.post(url, headers=headers, data=logindata)
+    if 'Wrong email or password' in str(loginreq.content):
+        print("Login Failed: Wrong credentials, please check config.")
+        sys.exit()
+    elif 'prettyRECON - Dashboard' and 'Logout' in str(loginreq.content):
+        print("Login Success!")
+        loginstatus = True
+    else:
+        print('Unknown Error!')
     sleep(2)
 
 def job():
