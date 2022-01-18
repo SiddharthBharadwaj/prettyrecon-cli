@@ -6,19 +6,26 @@ import requests
 import sys
 from time import sleep
 
+class bcolors:
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+
 def login():
 
     url='https://prettyrecon.com/api/v1/login'
     logindata = {"remember": "false", "email": email, "password": password}
     loginreq = s.post(url, headers=headers, data=logindata)
     if 'Wrong email or password' in str(loginreq.content):
-        print("Login Failed: Wrong credentials, please check config.")
+        print(bcolors.FAIL + "Login Failed: Wrong credentials, please check config." + bcolors.ENDC)
         sys.exit()
     elif 'prettyRECON - Dashboard' and 'Logout' in str(loginreq.content):
-        print("Login Success!")
+        print(bcolors.GREEN + "Login Success!" + bcolors.ENDC)
         loginstatus = True
     else:
-        print('Unknown Error!')
+        print(bcolors.FAIL + 'Unknown Error!' + bcolors.ENDC)
     sleep(2)
 
 def job():
@@ -30,7 +37,7 @@ def job():
             jobreq = s.get(jobs, headers=headers).content
             if 'Scan ID' in str(jobreq):
                 status=True
-                print("Tasks Pending....\nChecking again in 5 seconds.")
+                print(bcolors.BLUE + "Tasks Pending....\nChecking again in 5 seconds." + bcolors.ENDC)
                 sleep(5)
             else:
                 break
@@ -40,7 +47,7 @@ def job():
 
 def sub():
 
-    print("Subdomain Enumeration...")
+    print(bcolors.BOLD + "Subdomain Enumeration..." + bcolors.ENDC)
     targetinfo=baseurl+'/info'
     subinfo=baseurl+'/subinfo'
     s.get(targetinfo, headers=headers)
@@ -60,13 +67,13 @@ def basic():
     urls=baseurl+'/urls'
     
 
-    print("DNS Info...")
+    print(bcolors.BOLD + "DNS Info..." + bcolors.ENDC)
     dnsreq = s.get(dnsinfo, headers=headers)
     sleep(1)
-    print("Port Scan...")
+    print(bcolors.BOLD + "Port Scan..." + bcolors.ENDC)
     portreq = s.get(ports, headers=headers)
     sleep(1)
-    print("Waybackurls...")
+    print(bcolors.BOLD + "Waybackurls..." + bcolors.ENDC)
     s.get(urls, headers=headers)
     if args.output is not None:
         job()
@@ -88,19 +95,19 @@ def vuln():
     exposed=baseurl+'/exposed_secret'
     miscofig=baseurl+'/security_misconf_scan'
 
-    print("Subdomain Takeover...")
+    print(bcolors.BOLD + "Subdomain Takeover..." + bcolors.ENDC)
     subtkoreq = s.get(subtko, headers=headers)
     sleep(1)
-    print("Scanning for CVE's...")
+    print(bcolors.BOLD + "Scanning for CVE's..." + bcolors.ENDC)
     cvereq = s.get(cve, headers=headers)
     sleep(1)
-    print("Scanning for common vulnerabilities...")
+    print(bcolors.BOLD + "Scanning for common vulnerabilities..." + bcolors.ENDC)
     commonreq = s.get(common, headers=headers)
     sleep(1)
-    print("Scanning for exposed secrets...")
+    print(bcolors.BOLD + "Scanning for exposed secrets..." + bcolors.ENDC)
     exposedreq = s.get(exposed, headers=headers)
     sleep(1)
-    print("Scanning for security misconfigurations...")
+    print(bcolors.BOLD + "Scanning for security misconfigurations..." + bcolors.ENDC)
     miscreq = s.get(miscofig, headers=headers)
     if args.output is not None:
         job()
@@ -142,7 +149,7 @@ def main():
         login()
         sub()
     else:
-        print("Please select a valid scan type, i.e all,basic,vuln,sub.")
+        print(bcolors.FAIL + "Please select a valid scan type, i.e all,basic,vuln,sub." + bcolors.ENDC)
         sys.exit()
 
 
