@@ -13,6 +13,22 @@ def login():
     s.post(url, headers=headers, data=burp0_data)
     sleep(2)
 
+def job():
+
+    status=True
+    while True:
+        if status == True:
+            jobreq = s.get(jobs, headers=headers).content
+            if 'Scan ID' in str(jobreq):
+                status=True
+                print("Tasks Pending....\nChecking again in 5 seconds.")
+                sleep(5)
+            else:
+                break
+        else:
+            break
+
+
 def sub():
 
     print("Subdomain Enumeration...")
@@ -22,6 +38,7 @@ def sub():
     sleep(5)
     text = s.get(subinfo, headers=headers).content
     if args.output is not None:
+        job()
         soup = BeautifulSoup(text, "html.parser")
         scripts = (soup.find_all('script')[10].string.strip()[24:-2733]).encode().decode('unicode-escape')
         open(os.path.join(target, "subdomains.json"), 'w').write(scripts)
@@ -43,6 +60,7 @@ def basic():
     print("Waybackurls...")
     s.get(urls, headers=headers)
     if args.output is not None:
+        job()
         dnssoup = BeautifulSoup(dnsreq.content, "html.parser")
         portsoup = BeautifulSoup(portreq.content, "html.parser")
         dnsjson = (dnssoup.find_all('script')[10].string.strip()[34:-2905]).encode().decode('unicode-escape')
@@ -76,6 +94,7 @@ def vuln():
     print("Scanning for security misconfigurations...")
     miscreq = s.get(miscofig, headers=headers)
     if args.output is not None:
+        job()
         tkosoup = BeautifulSoup(subtkoreq.content, "html.parser")
         cvesoup = BeautifulSoup(cvereq.content, "html.parser")
         commonsoup = BeautifulSoup(commonreq.content , "html.parser")
@@ -117,7 +136,6 @@ def main():
         print("Please select a valid scan type, i.e all,basic,vuln,sub.")
         sys.exit()
 
-    
 
 
 
