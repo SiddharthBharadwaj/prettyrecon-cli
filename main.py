@@ -57,7 +57,7 @@ def sub():
         job()
         soup = BeautifulSoup(subreq.content, "html.parser")
         scripts = (soup.find_all('script')[10].string.strip()[24:-2733]).encode().decode('unicode-escape')
-        open(os.path.join(target, "subdomains.json"), 'w').write(scripts)
+        open(os.path.join(dir, "subdomains.json"), 'w').write(scripts)
 
 
 def basic():
@@ -81,10 +81,10 @@ def basic():
         portsoup = BeautifulSoup(portreq.content, "html.parser")
         dnsjson = (dnssoup.find_all('script')[10].string.strip()[34:-2905]).encode().decode('unicode-escape')
         portjson = (portsoup.find_all('script')[10].string.strip()[44:-2939]).encode().decode('unicode-escape')
-        open(os.path.join(target, "dnsinfo.json"), 'w').write(dnsjson)
-        open(os.path.join(target, "ports.json"), 'w').write(portjson)
+        open(os.path.join(dir, "dnsinfo.json"), 'w').write(dnsjson)
+        open(os.path.join(dir, "ports.json"), 'w').write(portjson)
         urldownload = s.get(url = urls+'?download=txt', allow_redirects=True)
-        open(os.path.join(target, 'waybackurls.txt'), 'wb').write(urldownload.content)
+        open(os.path.join(dir, 'waybackurls.txt'), 'wb').write(urldownload.content)
 
 
 def vuln():
@@ -121,11 +121,11 @@ def vuln():
         commonjson = (commonsoup.find_all('script')[10].string.strip()[12:-2391]).encode().decode('unicode-escape')
         exposedjson = (exposedsoup.find_all('script')[10].string.strip()[12:-2453]).encode().decode('unicode-escape')
         miscjson = (miscsoup.find_all('script')[10].string.strip()[12:-2386]).encode().decode('unicode-escape')
-        open(os.path.join(target, "subtko.json"), 'w').write(tkojson)
-        open(os.path.join(target, "cves.json"), 'w').write(cvejson)
-        open(os.path.join(target, "common_vulns.json"), 'w').write(commonjson)
-        open(os.path.join(target, "exposed_cred.json"), 'w').write(exposedjson)
-        open(os.path.join(target, "misc_vulns.json"), 'w').write(miscjson)
+        open(os.path.join(dir, "subtko.json"), 'w').write(tkojson)
+        open(os.path.join(dir, "cves.json"), 'w').write(cvejson)
+        open(os.path.join(dir, "common_vulns.json"), 'w').write(commonjson)
+        open(os.path.join(dir, "exposed_cred.json"), 'w').write(exposedjson)
+        open(os.path.join(dir, "misc_vulns.json"), 'w').write(miscjson)
         
 
 
@@ -163,11 +163,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
     target = args.target
     type = args.scan_type
+    dir = "output/"+target
     s = requests.Session()
     baseurl='https://prettyrecon.com/target/'+target
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
     if args.output is not None:
-        if not os.path.exists(target):
-            os.makedirs(target)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
 
     main()
