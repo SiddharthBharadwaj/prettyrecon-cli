@@ -44,6 +44,11 @@ def job():
         else:
             break
 
+def deltemp():
+
+    if os.path.exists(os.path.join(dir, ".temp.html")):
+        os.remove(os.path.join(dir, ".temp.html"))
+
 
 def sub():
 
@@ -56,8 +61,11 @@ def sub():
     if args.output is not None:
         job()
         soup = BeautifulSoup(subreq.content, "html.parser")
-        scripts = (soup.find_all('script')[10].string.strip()[24:-2733]).encode().decode('unicode-escape')
-        open(os.path.join(dir, "subdomains.json"), 'w').write(scripts)
+        subjson = (soup.find_all('script')[10])
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(subjson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data = JSON.parse" in line: open(os.path.join(dir, "subdomains.json"), 'w').write(line.strip()[23:-3].encode().decode('unicode-escape'))
+
 
 
 def basic():
@@ -79,10 +87,14 @@ def basic():
         job()
         dnssoup = BeautifulSoup(dnsreq.content, "html.parser")
         portsoup = BeautifulSoup(portreq.content, "html.parser")
-        dnsjson = (dnssoup.find_all('script')[10].string.strip()[34:-2905]).encode().decode('unicode-escape')
-        portjson = (portsoup.find_all('script')[10].string.strip()[44:-2939]).encode().decode('unicode-escape')
-        open(os.path.join(dir, "dnsinfo.json"), 'w').write(dnsjson)
-        open(os.path.join(dir, "ports.json"), 'w').write(portjson)
+        dnsjson = (dnssoup.find_all('script')[10])
+        portjson = (portsoup.find_all('script')[10])
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(dnsjson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "dnsinfo.json"), 'w').write(line.strip()[11:-1].encode().decode('unicode-escape'))
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(portjson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "ports.json"), 'w').write(line.strip()[11:-1].encode().decode('unicode-escape'))
         urldownload = s.get(url = urls+'?download=txt', allow_redirects=True)
         open(os.path.join(dir, 'waybackurls.txt'), 'wb').write(urldownload.content)
 
@@ -116,17 +128,26 @@ def vuln():
         commonsoup = BeautifulSoup(commonreq.content , "html.parser")
         exposedsoup = BeautifulSoup(exposedreq.content , "html.parser")
         miscsoup = BeautifulSoup(miscreq.content , "html.parser")
-        tkojson = (tkosoup.find_all('script')[10].string.strip()[11:-2396]).encode().decode('unicode-escape')
-        cvejson = (cvesoup.find_all('script')[10].string.strip()[12:-2377]).encode().decode('unicode-escape')
-        commonjson = (commonsoup.find_all('script')[10].string.strip()[12:-2391]).encode().decode('unicode-escape')
-        exposedjson = (exposedsoup.find_all('script')[10].string.strip()[12:-2453]).encode().decode('unicode-escape')
-        miscjson = (miscsoup.find_all('script')[10].string.strip()[12:-2386]).encode().decode('unicode-escape')
-        open(os.path.join(dir, "subtko.json"), 'w').write(tkojson)
-        open(os.path.join(dir, "cves.json"), 'w').write(cvejson)
-        open(os.path.join(dir, "common_vulns.json"), 'w').write(commonjson)
-        open(os.path.join(dir, "exposed_cred.json"), 'w').write(exposedjson)
-        open(os.path.join(dir, "misc_vulns.json"), 'w').write(miscjson)
-        
+        tkojson = (tkosoup.find_all('script')[10])
+        cvejson = (cvesoup.find_all('script')[10])
+        commonjson = (commonsoup.find_all('script')[10])
+        exposedjson = (exposedsoup.find_all('script')[10])
+        miscjson = (miscsoup.find_all('script')[10])
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(tkojson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "subtko.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(cvejson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "cves.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(commonjson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "common_vulns.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(exposedjson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "exposed_creds.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
+        open(os.path.join(dir, ".temp.html"), 'w').write(str(miscjson))
+        for line in open(os.path.join(dir, ".temp.html"), 'r'):
+            if "var data =" in line: open(os.path.join(dir, "misc_vulns.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))     
 
 
 
@@ -137,17 +158,21 @@ def main():
         sub()
         basic()
         vuln()
+        deltemp()
     elif (type=='basic'):
         login()
         sub()
         basic()
+        deltemp()
     elif (type=='vuln'):
         login()
         sub()
         vuln()
+        deltemp()
     elif (type=='sub'):
         login()
         sub()
+        deltemp()
     else:
         print(bcolors.FAIL + "Please select a valid scan type, i.e all,basic,vuln,sub." + bcolors.ENDC)
         sys.exit()
@@ -159,7 +184,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrettyRecon CLI')
     parser.add_argument("-t", "--target", help="Supply the target to scan.", required=True)
     parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only", required=True)
-    parser.add_argument("-o", "--output", help="Saves output to json file. Usage: main.py -t TARGET -st SCANTYPE -o filename(default is output.txt)", nargs='?', const='1')
+    parser.add_argument("-o", "--output", help="Saves output to output/*.json file. Usage: main.py -t TARGET -st SCANTYPE -o", nargs='?', const='1')
     args = parser.parse_args()
     target = args.target
     type = args.scan_type
