@@ -44,7 +44,7 @@ optional arguments:
                         vulns only, sub: Subdomains only
   -o [OUTPUT], --output [OUTPUT]
                         Saves output to output/*.json file. Usage: main.py -t
-                        TARGET -st SCANTYPE -opython3 main.py --help
+                        TARGET -st SCANTYPE -o
 ```
 
 Tested on Python 3.9.7. Feel free to [open an issue](https://github.com/christophetd/cloudflair/issues/new) if you have bug reports,feature requests questions.
