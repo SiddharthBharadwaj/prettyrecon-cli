@@ -28,20 +28,34 @@ def login():
         print(bcolors.FAIL + 'Unknown Error!' + bcolors.ENDC)
     sleep(2)
 
+def initjob(flag):
+
+    if flag==0:
+        mydivs = BeautifulSoup(s.get(jobs, headers=headers).content, "html.parser").find_all("div", {"class": "well animated slideInUp"})
+        for tag in mydivs:
+            if 'id' in tag.attrs:
+                runningjobs.append(tag['id'])
+    elif flag==1:
+        mydivs = BeautifulSoup(s.get(jobs, headers=headers).content, "html.parser").find_all("div", {"class": "well animated slideInUp"})
+        for tag in mydivs:
+            if 'id' in tag.attrs:
+                if tag['id'] not in runningjobs:
+                    print("Job with ID "+tag['id']+" Started!")
+                    joblist.append(tag['id'])
+
 def job():
 
-    jobs='https://prettyrecon.com/target/running-jobs'
     status=True
-    while True:
-        if status == True:
-            jobreq = s.get(jobs, headers=headers).content
-            if 'Scan ID' in str(jobreq):
-                status=True
-                print(bcolors.BLUE + "Tasks Pending....\nChecking again in 5 seconds." + bcolors.ENDC)
-                sleep(5)
-            else:
-                break
+    while status==True:
+        mydivs = BeautifulSoup(s.get(jobs, headers=headers).content, "html.parser").find_all("div", {"class": "well animated slideInUp"})
+        ids = [tag['id'] for tag in mydivs if 'id' in tag.attrs]
+        if any(item in joblist for item in ids):
+            status=True
+            sys.stdout.write('■')
+            sys.stdout.flush()
+            sleep(5)
         else:
+            status=False
             break
 
 def deltemp():
@@ -58,6 +72,7 @@ def sub():
     s.get(targetinfo, headers=headers)
     sleep(1)
     subreq = s.get(subinfo, headers=headers)
+    initjob(1)
     if args.output is not None:
         job()
         soup = BeautifulSoup(subreq.content, "html.parser")
@@ -73,7 +88,6 @@ def basic():
     dnsinfo=baseurl+'/dnsinfo'
     ports=baseurl+'/ports'
     urls=baseurl+'/urls'
-    
 
     print(bcolors.BOLD + "DNS Info..." + bcolors.ENDC)
     dnsreq = s.get(dnsinfo, headers=headers)
@@ -83,6 +97,8 @@ def basic():
     sleep(1)
     print(bcolors.BOLD + "Waybackurls..." + bcolors.ENDC)
     s.get(urls, headers=headers)
+    sleep(1)
+    initjob(1)
     if args.output is not None:
         job()
         dnssoup = BeautifulSoup(dnsreq.content, "html.parser")
@@ -121,6 +137,8 @@ def vuln():
     sleep(1)
     print(bcolors.BOLD + "Scanning for security misconfigurations..." + bcolors.ENDC)
     miscreq = s.get(miscofig, headers=headers)
+    sleep(1)
+    initjob(1)
     if args.output is not None:
         job()
         tkosoup = BeautifulSoup(subtkoreq.content, "html.parser")
@@ -155,22 +173,26 @@ def main():
 
     if (type=='all'):
         login()
+        initjob(0)
         sub()
         basic()
         vuln()
         deltemp()
     elif (type=='basic'):
         login()
+        initjob(0)
         sub()
         basic()
         deltemp()
     elif (type=='vuln'):
         login()
+        initjob(0)
         sub()
         vuln()
         deltemp()
     elif (type=='sub'):
         login()
+        initjob(0)
         sub()
         deltemp()
     else:
@@ -189,6 +211,9 @@ if __name__ == '__main__':
     target = args.target
     type = args.scan_type
     dir = "output/"+target
+    jobs='https://prettyrecon.com/target/running-jobs'
+    runningjobs=[]
+    joblist=[]
     s = requests.Session()
     baseurl='https://prettyrecon.com/target/'+target
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
