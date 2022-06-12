@@ -5,6 +5,8 @@ import os
 import requests
 import sys
 from time import sleep
+import validators
+
 
 class bcolors:
     BLUE = '\033[94m'
@@ -215,7 +217,11 @@ if __name__ == '__main__':
     runningjobs=[]
     joblist=[]
     s = requests.Session()
-    baseurl='https://prettyrecon.com/target/'+target
+    if validators.domain(target):
+        baseurl='https://prettyrecon.com/target/'+target
+    else:
+        print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
+        sys.exit()
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
     if args.output is not None:
         if not os.path.exists(dir):

@@ -1,3 +1,4 @@
-argparse
-python3-bs4
-requests
+argparse == 1.4.0
+beautifulsoup4 == 4.10.0
+requests == 2.27.1
+validators == 0.20.0
