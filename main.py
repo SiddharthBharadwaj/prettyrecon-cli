@@ -1,6 +1,8 @@
 import argparse
+import shutil
 from bs4 import BeautifulSoup
 from config import email, password
+from filesplit.split import Split
 import os
 import requests
 import sys
@@ -75,14 +77,13 @@ def sub():
     sleep(1)
     s.get(subinfo, headers=headers)
     initjob(1)
-    if args.output is not None:
+    if args.output:
         job()
         soup = BeautifulSoup(s.get(subinfo, headers=headers).content, "html.parser")
         subjson = (soup.find_all('script')[10])
         open(os.path.join(dir, ".temp.html"), 'w').write(str(subjson))
         for line in open(os.path.join(dir, ".temp.html"), 'r'):
             if "var data = JSON.parse" in line: open(os.path.join(dir, "subdomains.json"), 'w').write(line.strip()[23:-3].encode().decode('unicode-escape'))
-
 
 
 def basic():
@@ -101,7 +102,7 @@ def basic():
     s.get(urls, headers=headers)
     sleep(1)
     initjob(1)
-    if args.output is not None:
+    if args.output:
         job()
         dnssoup = BeautifulSoup(s.get(dnsinfo, headers=headers).content, "html.parser")
         portsoup = BeautifulSoup(s.get(ports, headers=headers).content, "html.parser")
@@ -141,7 +142,7 @@ def vuln():
     s.get(miscofig, headers=headers)
     sleep(1)
     initjob(1)
-    if args.output is not None:
+    if args.output:
         job()
         tkosoup = BeautifulSoup(s.get(subtko, headers=headers).content, "html.parser")
         cvesoup = BeautifulSoup(s.get(cve, headers=headers).content, "html.parser")
@@ -170,58 +171,96 @@ def vuln():
             if "var data =" in line: open(os.path.join(dir, "misc_vulns.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))     
 
 
+def CustomSumScan():
+    if os.path.exists(args.customsubscan):
+            url = "https://prettyrecon.com:443/tools/custom_subdomains"
+            if not os.path.exists('Splits'):
+                os.makedirs('Splits')
+            filename=args.customsubscan
+            split = Split(inputfile=filename, outputdir='Splits')
+            split.bylinecount(300)
+            _, _, files = next(os.walk("Splits"))
+            file_count = len(files)
+            n = 1
+            while file_count != 1:
+                file = open('Splits/'+filename[:-4]+"_"+str(n)+".txt")
+                datap = file.read().replace('\n', '\r\n')
+                data = {"scanname": "CliScan", "subdomains": datap}
+                s.post(url, headers=headers, data=data)
+                initjob(1)
+                job()
+                file_count-=1
+                n+=1
+            shutil.rmtree("Splits") 
+            print("CustomSubScan Finished!")   
+    else:
+        print(bcolors.FAIL + "Path/File at "+args.customsubscan+"not found!" + bcolors.ENDC)
+        sys.exit()
+
 
 def main():
 
-    if (type=='all'):
+    if args.customsubscan:
         login()
         initjob(0)
-        sub()
-        basic()
-        vuln()
-        deltemp()
-    elif (type=='basic'):
-        login()
-        initjob(0)
-        sub()
-        basic()
-        deltemp()
-    elif (type=='vuln'):
-        login()
-        initjob(0)
-        sub()
-        vuln()
-        deltemp()
-    elif (type=='sub'):
-        login()
-        initjob(0)
-        sub()
-        deltemp()
+        CustomSumScan()
+    elif args.target and args.scan_type:
+        if (type=='all'):
+            login()
+            initjob(0)
+            sub()
+            basic()
+            vuln()
+            deltemp()
+        elif (type=='basic'):
+            login()
+            initjob(0)
+            sub()
+            basic()
+            deltemp()
+        elif (type=='vuln'):
+            login()
+            initjob(0)
+            sub()
+            vuln()
+            deltemp()
+        elif (type=='sub'):
+            login()
+            initjob(0)
+            sub()
+            deltemp()
+        else:
+            print(bcolors.FAIL + "Please select a valid scan type, i.e all,basic,vuln,sub." + bcolors.ENDC)
+            sys.exit()
     else:
-        print(bcolors.FAIL + "Please select a valid scan type, i.e all,basic,vuln,sub." + bcolors.ENDC)
+        print(bcolors.FAIL + "Please pass valid arguments! i.e. Either '-t' and '-st' for normal scan OR '-cscn' for CustomSubScan" + bcolors.ENDC)
         sys.exit()
-
 
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrettyRecon CLI')
-    parser.add_argument("-t", "--target", help="Supply the target to scan.", required=True)
-    parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only", required=True)
-    parser.add_argument("-o", "--output", help="Saves output to output/*.json file. Usage: main.py -t TARGET -st SCANTYPE -o", nargs='?', const='1')
+    parser.add_argument("-t", "--target", help="Supply the target to scan.")
+    parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only", required='--target' in sys.argv)
+    parser.add_argument("-o", "--output", help="Saves output to output/*.json file.")
+    parser.add_argument("-cscn", "--customsubscan", help="For the CustomSubScan feature of PrettyRecon. Pass filename after flag.")
     args = parser.parse_args()
     target = args.target
     type = args.scan_type
-    dir = "output/"+target
+    if args.output:
+        dir = str(args.output)+"/"+target
     jobs='https://prettyrecon.com/target/running-jobs'
     runningjobs=[]
     joblist=[]
     s = requests.Session()
-    if validators.domain(target):
-        baseurl='https://prettyrecon.com/target/'+target
-    else:
-        print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
-        sys.exit()
+    if args.target and (args.scan_type is None):
+        parser.error("Missing argument '-st/--scan_type' ")
+    elif args.target:
+        if validators.domain(target):
+            baseurl='https://prettyrecon.com/target/'+target
+        else:
+           print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
+           sys.exit()
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
     if args.output is not None:
         if not os.path.exists(dir):
