@@ -183,7 +183,7 @@ def CustomSumScan():
             file_count = len(files)
             n = 1
             while file_count != 1:
-                file = open('Splits/'+filename[:-4]+"_"+str(n)+".txt")
+                file = open('Splits/'+filename+"_"+str(n)+"")
                 datap = file.read().replace('\n', '\r\n')
                 data = {"scanname": "CliScan", "subdomains": datap}
                 s.post(url, headers=headers, data=data)
