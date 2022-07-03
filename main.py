@@ -64,8 +64,8 @@ def job():
 
 def deltemp():
 
-    if os.path.exists(os.path.join(dir, ".temp.html")):
-        os.remove(os.path.join(dir, ".temp.html"))
+    if os.path.exists(os.path.join(str(dir), ".temp.html")):
+        os.remove(os.path.join(str(dir), ".temp.html"))
 
 
 def sub():
@@ -247,8 +247,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     target = args.target
     type = args.scan_type
-    if args.output:
+    if args.output is not None:
         dir = str(args.output)+"/"+target
+        if not os.path.exists(dir):
+            os.makedirs(dir)
     jobs='https://prettyrecon.com/target/running-jobs'
     runningjobs=[]
     joblist=[]
@@ -262,8 +264,5 @@ if __name__ == '__main__':
            print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
            sys.exit()
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
-    if args.output is not None:
-        if not os.path.exists(dir):
-            os.makedirs(dir)
 
     main()
