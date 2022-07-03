@@ -31,7 +31,8 @@ $ python3 main.py -t example.com -st scantype
 
 ```bash
 $ python3 main.py --help
-usage: main.py [-h] -t TARGET -st SCAN_TYPE [-o [OUTPUT]]
+usage: main.py [-h] [-t TARGET] [-st SCAN_TYPE] [-o OUTPUT]
+               [-cscn CUSTOMSUBSCAN]
 
 PrettyRecon CLI
 
@@ -42,9 +43,11 @@ optional arguments:
   -st SCAN_TYPE, --scan_type SCAN_TYPE
                         all: Full scan, basic: Basic scan, vuln: Scan for
                         vulns only, sub: Subdomains only
-  -o [OUTPUT], --output [OUTPUT]
-                        Saves output to output/*.json file. Usage: main.py -t
-                        TARGET -st SCANTYPE -o
+  -o OUTPUT, --output OUTPUT
+                        Saves output to output/*.json file.
+  -cscn CUSTOMSUBSCAN, --customsubscan CUSTOMSUBSCAN
+                        For the CustomSubScan feature of PrettyRecon. Pass
+                        filename after flag.
 ```
 
 Tested on Python 3.9.7. Feel free to [open an issue](https://github.com/christophetd/cloudflair/issues/new) if you have bug reports,feature requests questions.
