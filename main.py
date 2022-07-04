@@ -242,13 +242,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrettyRecon CLI')
     parser.add_argument("-t", "--target", help="Supply the target to scan.")
     parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only", required='--target' in sys.argv)
-    parser.add_argument("-o", "--output", help="Saves output to output/*.json file.")
+    parser.add_argument("-o", "--output", help="Saves output to output/*.json file.",nargs='?', const='1')
     parser.add_argument("-cscn", "--customsubscan", help="For the CustomSubScan feature of PrettyRecon. Pass filename after flag.")
     args = parser.parse_args()
     target = args.target
     type = args.scan_type
     if args.output is not None:
-        dir = str(args.output)+"/"+target
+        dir = 'output'+"/"+target
         if not os.path.exists(dir):
             os.makedirs(dir)
     jobs='https://prettyrecon.com/target/running-jobs'
