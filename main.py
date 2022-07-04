@@ -1,5 +1,6 @@
 import argparse
 import shutil
+import random
 from bs4 import BeautifulSoup
 from config import email, password
 from filesplit.split import Split
@@ -177,6 +178,7 @@ def CustomSumScan():
             if not os.path.exists('Splits'):
                 os.makedirs('Splits')
             filename=args.customsubscan
+            ran = random.randint(0,1000)
             split = Split(inputfile=filename, outputdir='Splits')
             split.bylinecount(300)
             _, _, files = next(os.walk("Splits"))
@@ -185,7 +187,8 @@ def CustomSumScan():
             while file_count != 1:
                 file = open('Splits/'+filename+"_"+str(n)+"")
                 datap = file.read().replace('\n', '\r\n')
-                data = {"scanname": "CliScan", "subdomains": datap}
+                data = {"scanname": "CliScan"+str(ran), "subdomains": datap}
+                #print (data)
                 s.post(url, headers=headers, data=data)
                 initjob(1)
                 job()
@@ -248,7 +251,7 @@ if __name__ == '__main__':
     target = args.target
     type = args.scan_type
     if args.output is not None:
-        dir = str(args.output)+"/"+target
+        dir = str(args.output)+"/"+str(target)
         if not os.path.exists(dir):
             os.makedirs(dir)
     jobs='https://prettyrecon.com/target/running-jobs'
