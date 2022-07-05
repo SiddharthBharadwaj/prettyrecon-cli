@@ -2,6 +2,7 @@ import argparse
 import shutil
 from bs4 import BeautifulSoup
 from config import email, password
+from datetime import datetime
 from filesplit.split import Split
 import os
 import requests
@@ -183,16 +184,17 @@ def CustomSumScan():
             file_count = len(files)
             n = 1
             while file_count != 1:
-                file = open('Splits/'+filename[:-4]+"_"+str(n)+".txt")
+                dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                file = open(os.path.splitext('Splits/'+filename)[0]+"_"+str(n)+os.path.splitext('Splits/'+filename)[1])
                 datap = file.read().replace('\n', '\r\n')
-                data = {"scanname": "CliScan", "subdomains": datap}
+                data = {"scanname": "CliScan "+dt, "subdomains": datap}
                 s.post(url, headers=headers, data=data)
                 initjob(1)
                 job()
                 file_count-=1
                 n+=1
             shutil.rmtree("Splits") 
-            print("CustomSubScan Finished!")   
+            print("\nCustomSubScan Finished!")   
     else:
         print(bcolors.FAIL + "Path/File at "+args.customsubscan+"not found!" + bcolors.ENDC)
         sys.exit()
@@ -245,7 +247,7 @@ if __name__ == '__main__':
     parser.add_argument("-o", "--output", help="Saves output to output/*.json file.",nargs='?', const='1')
     parser.add_argument("-cscn", "--customsubscan", help="For the CustomSubScan feature of PrettyRecon. Pass filename after flag.")
     args = parser.parse_args()
-    target = args.target
+    target = str(args.target)
     type = args.scan_type
     if args.output is not None:
         dir = 'output'+"/"+target
