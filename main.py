@@ -20,17 +20,20 @@ class bcolors:
 
 def login():
 
-    url='https://prettyrecon.com/api/v1/login'
-    logindata = {"remember": "false", "email": email, "password": password}
+    url='https://prettyrecon.com/login/'
+    s.get(url, headers=headers)
+    csrftoken = s.cookies.get_dict()['csrftoken']
+    logindata = {"csrfmiddlewaretoken": csrftoken, "email": email, "password": password}
     loginreq = s.post(url, headers=headers, data=logindata)
-    if 'Wrong email or password' in str(loginreq.content):
+    if 'Invalid credentials' in str(loginreq.content):
         print(bcolors.FAIL + "Login Failed: Wrong credentials, please check config." + bcolors.ENDC)
         sys.exit()
-    elif 'prettyRECON - Dashboard' and 'Logout' in str(loginreq.content):
+    elif 'Dashboard Summary' and 'Sign Out' in str(loginreq.content):
         print(bcolors.GREEN + "Login Success!" + bcolors.ENDC)
         loginstatus = True
     else:
         print(bcolors.FAIL + 'Unknown Error!' + bcolors.ENDC)
+        sys.exit()
     sleep(2)
 
 def initjob(flag):
@@ -72,8 +75,8 @@ def deltemp():
 def sub():
 
     print(bcolors.BOLD + "Subdomain Enumeration..." + bcolors.ENDC)
-    targetinfo=baseurl+'/info'
-    subinfo=baseurl+'/subinfo'
+    targetinfo=baseurl
+    subinfo=baseurl+'/subdomains/'
     s.get(targetinfo, headers=headers)
     sleep(1)
     s.get(subinfo, headers=headers)
@@ -89,9 +92,9 @@ def sub():
 
 def basic():
 
-    dnsinfo=baseurl+'/dnsinfo'
-    ports=baseurl+'/ports'
-    urls=baseurl+'/urls'
+    dnsinfo=baseurl+'/dns/'
+    ports=baseurl+'/ports/'
+    urls=baseurl+'/wayback_urls/'
 
     print(bcolors.BOLD + "DNS Info..." + bcolors.ENDC)
     s.get(dnsinfo, headers=headers)
@@ -121,35 +124,20 @@ def basic():
 
 def vuln():
 
-    subtko=baseurl+'/takeover_subdomain_scan'
-    cve=baseurl+'/cves_scan'
-    common=baseurl+'/vulnerability_detection'
-    exposed=baseurl+'/exposed_secret'
-    miscofig=baseurl+'/security_misconf_scan'
+    exposed=baseurl+'/exposed_secrets/'
+    webscan=baseurl+'/web_scanner/'
 
-    print(bcolors.BOLD + "Subdomain Takeover..." + bcolors.ENDC)
-    s.get(subtko, headers=headers)
-    sleep(1)
-    print(bcolors.BOLD + "Scanning for CVE's..." + bcolors.ENDC)
-    s.get(cve, headers=headers)
-    sleep(1)
-    print(bcolors.BOLD + "Scanning for common vulnerabilities..." + bcolors.ENDC)
-    s.get(common, headers=headers)
+    print(bcolors.BOLD + "Scanning for security misconfigurations..." + bcolors.ENDC)
+    s.get(webscan, headers=headers)
     sleep(1)
     print(bcolors.BOLD + "Scanning for exposed secrets..." + bcolors.ENDC)
     s.get(exposed, headers=headers)
     sleep(1)
-    print(bcolors.BOLD + "Scanning for security misconfigurations..." + bcolors.ENDC)
-    s.get(miscofig, headers=headers)
-    sleep(1)
     initjob(1)
     if args.output:
         job()
-        tkosoup = BeautifulSoup(s.get(subtko, headers=headers).content, "html.parser")
-        cvesoup = BeautifulSoup(s.get(cve, headers=headers).content, "html.parser")
-        commonsoup = BeautifulSoup(s.get(common, headers=headers).content , "html.parser")
+        miscsoup = BeautifulSoup(s.get(webscan, headers=headers).content , "html.parser")
         exposedsoup = BeautifulSoup(s.get(exposed, headers=headers).content , "html.parser")
-        miscsoup = BeautifulSoup(s.get(miscofig, headers=headers).content , "html.parser")
         tkojson = (tkosoup.find_all('script')[10])
         cvejson = (cvesoup.find_all('script')[10])
         commonjson = (commonsoup.find_all('script')[10])
@@ -187,7 +175,9 @@ def CustomSumScan():
                 dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
                 file = open(os.path.splitext('Splits/'+filename)[0]+"_"+str(n)+os.path.splitext('Splits/'+filename)[1])
                 datap = file.read().replace('\n', '\r\n')
-                data = {"scanname": "CliScan "+dt, "subdomains": datap}
+                s.get(url, headers=headers)
+                csrftoken = s.cookies.get_dict()['csrftoken']
+                data = {"csrfmiddlewaretoken": csrftoken, "scanname": "CliScan "+dt, "targets": datap}
                 s.post(url, headers=headers, data=data)
                 initjob(1)
                 job()
@@ -263,8 +253,8 @@ if __name__ == '__main__':
         if validators.domain(target):
             baseurl='https://prettyrecon.com/target/'+target
         else:
-           print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
+           print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
            sys.exit()
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36"}
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36", "Content-Type": "application/x-www-form-urlencoded", "Origin": "https://prettyrecon.com"}
 
     main()
