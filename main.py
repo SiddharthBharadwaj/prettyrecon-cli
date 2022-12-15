@@ -6,6 +6,7 @@ from datetime import datetime
 from filesplit.split import Split
 import os
 import requests
+import re
 import sys
 from time import sleep
 import validators
@@ -30,7 +31,6 @@ def login():
         sys.exit()
     elif 'Dashboard Summary' and 'Sign Out' in str(loginreq.content):
         print(bcolors.GREEN + "Login Success!" + bcolors.ENDC)
-        loginstatus = True
     else:
         print(bcolors.FAIL + 'Unknown Error!' + bcolors.ENDC)
         sys.exit()
@@ -39,25 +39,25 @@ def login():
 def initjob(flag):
 
     if flag==0:
-        mydivs = BeautifulSoup(s.get(jobs, headers=headers).content, "html.parser").find_all("div", {"class": "well animated slideInUp"})
-        for tag in mydivs:
-            if 'id' in tag.attrs:
-                runningjobs.append(tag['id'])
+       currjob = re.findall(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', str(s.get(jobs, headers=headers).text))
+       for id in currjob:
+            runningjobs.add(id)
     elif flag==1:
-        mydivs = BeautifulSoup(s.get(jobs, headers=headers).content, "html.parser").find_all("div", {"class": "well animated slideInUp"})
-        for tag in mydivs:
-            if 'id' in tag.attrs:
-                if tag['id'] not in runningjobs:
-                    print("Job with ID "+tag['id']+" Started!")
-                    joblist.append(tag['id'])
+        currjob = re.findall(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', str(s.get(jobs, headers=headers).text))
+        ujobs = set()
+        for id in currjob:
+            ujobs.add(id)
+        for id in ujobs:
+            if id not in runningjobs:
+                    print("Job with ID "+id+" Started!")
+                    joblist.append(id)
 
 def job():
 
     status=True
     while status==True:
-        mydivs = BeautifulSoup(s.get(jobs, headers=headers).content, "html.parser").find_all("div", {"class": "well animated slideInUp"})
-        ids = [tag['id'] for tag in mydivs if 'id' in tag.attrs]
-        if any(item in joblist for item in ids):
+        currjobs = re.findall(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', str(s.get(jobs, headers=headers).text))
+        if any(item in joblist for item in currjobs):
             status=True
             sys.stdout.write('■')
             sys.stdout.flush()
@@ -162,7 +162,7 @@ def vuln():
 
 def CustomSumScan():
     if os.path.exists(args.customsubscan):
-            url = "https://prettyrecon.com:443/tools/custom_subdomains"
+            url = "https://prettyrecon.com/tools/custom_subdomains/"
             if not os.path.exists('Splits'):
                 os.makedirs('Splits')
             filename=args.customsubscan
@@ -177,8 +177,8 @@ def CustomSumScan():
                 datap = file.read().replace('\n', '\r\n')
                 s.get(url, headers=headers)
                 csrftoken = s.cookies.get_dict()['csrftoken']
-                data = {"csrfmiddlewaretoken": csrftoken, "scanname": "CliScan "+dt, "targets": datap}
-                s.post(url, headers=headers, data=data)
+                data = {"csrfmiddlewaretoken": csrftoken, "scan_name": "CliScan "+ dt, "targets": datap}
+                req = s.post(url, headers=headers, data=data, allow_redirects=False)
                 initjob(1)
                 job()
                 file_count-=1
@@ -243,10 +243,11 @@ if __name__ == '__main__':
         dir = 'output'+"/"+target
         if not os.path.exists(dir):
             os.makedirs(dir)
-    jobs='https://prettyrecon.com/target/running-jobs'
-    runningjobs=[]
-    joblist=[]
     s = requests.Session()
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36", "Content-Type": "application/x-www-form-urlencoded", "Origin": "https://prettyrecon.com"}
+    jobs='https://prettyrecon.com/tasks/'
+    runningjobs = set()
+    joblist=[]
     if args.target and (args.scan_type is None):
         parser.error("Missing argument '-st/--scan_type' ")
     elif args.target:
@@ -255,6 +256,4 @@ if __name__ == '__main__':
         else:
            print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
            sys.exit()
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36", "Content-Type": "application/x-www-form-urlencoded", "Origin": "https://prettyrecon.com"}
-
     main()
