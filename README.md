@@ -1,54 +1,99 @@
-# PrettyRecon-cli
-PrettyRecon-cli is an unofficial cli client for [PrettyRecon](https://prettyrecon.com/).
+# PrettyRecon CLI
 
-This tool can be used to trigger various tasks on prettyrecon as well as fetch output of those tasks/scans.
+A command-line interface for PrettyRecon, a web-based reconnaissance and security scanning platform.
 
-As PrettyRecon currently does not have any api feature available, prettyrecon-cli uses email and password for authentication. None of these are saved or shared anywhere other than your computer where it is running.
+## Features
 
-## Setup
+- Subdomain enumeration
+- DNS information gathering
+- Port scanning
+- Wayback URL discovery
+- Security misconfiguration scanning
+- Exposed secrets detection
+- Custom subdomain scanning
 
-1. Clone the repository
+## Installation
 
+1. Clone the repository:
 ```bash
-$ git clone https://github.com/SiddharthBharadwaj/prettyrecon-cli.git
+git clone https://github.com/yourusername/prettyrecon-cli.git
+cd prettyrecon-cli
 ```
 
-2. Install the dependencies
-
+2. Install dependencies:
 ```bash
-$ cd prettyrecon-cli
-$ pip3 install -r requirements.txt
+pip install -r requirements.txt
 ```
-3. Update config.py with valid credentials
 
-4. Run prettyrecon-cli (see [Usage](#usage) below for more detail)
-
-```bash
-$ python3 main.py -t example.com -st scantype
+3. Set up environment variables:
+Create a `.env` file in the project root:
+```
+PRETTYRECON_EMAIL=your_email
+PRETTYRECON_PASSWORD=your_password
 ```
 
 ## Usage
 
+### Basic Scan
 ```bash
-$ python3 main.py --help
-usage: main.py [-h] [-t TARGET] [-st SCAN_TYPE] [-o OUTPUT]
-               [-cscn CUSTOMSUBSCAN]
-
-PrettyRecon CLI
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -t TARGET, --target TARGET
-                        Supply the target to scan.
-  -st SCAN_TYPE, --scan_type SCAN_TYPE
-                        all: Full scan, basic: Basic scan, vuln: Scan for
-                        vulns only, sub: Subdomains only
-  -o OUTPUT, --output OUTPUT
-                        Saves output to output/*.json file.
-  -cscn CUSTOMSUBSCAN, --customsubscan CUSTOMSUBSCAN
-                        For the CustomSubScan feature of PrettyRecon. Pass
-                        filename after flag.
+python main.py -t example.com -st basic -o
 ```
 
-Tested on Python 3.9.7. Feel free to [open an issue](https://github.com/christophetd/cloudflair/issues/new) if you have bug reports,feature requests questions.
-Contributions are most welcome!
+### Full Scan
+```bash
+python main.py -t example.com -st all -o
+```
+
+### Subdomain Only Scan
+```bash
+python main.py -t example.com -st sub -o
+```
+
+### Vulnerability Scan
+```bash
+python main.py -t example.com -st vuln -o
+```
+
+### Custom Subdomain Scan
+```bash
+python main.py -cscn subdomains.txt
+```
+
+## Command Line Arguments
+
+- `-t, --target`: Target domain to scan (e.g., example.com)
+- `-st, --scan_type`: Scan type (all/basic/vuln/sub)
+- `-o, --output`: Save results to JSON files
+- `-cscn, --customsubscan`: File containing custom subdomains to scan
+
+## Output
+
+When using the `-o` flag, results are saved in the `output/<target>` directory:
+
+- `subdomains.json`: Discovered subdomains
+- `dnsinfo.json`: DNS information
+- `ports.json`: Open ports
+- `waybackurls.txt`: Historical URLs
+- `exposed_creds.json`: Exposed credentials
+- `misc_vulns.json`: Miscellaneous vulnerabilities
+
+## Error Handling
+
+The tool includes comprehensive error handling for:
+- Network issues
+- Authentication failures
+- Invalid input
+- File operations
+- API errors
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

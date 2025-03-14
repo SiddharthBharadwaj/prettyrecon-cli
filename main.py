@@ -1,259 +1,459 @@
 import argparse
-import shutil
-from bs4 import BeautifulSoup
-from config import email, password
-from datetime import datetime
-from filesplit.split import Split
-import os
-import requests
-import re
+from pathlib import Path
 import sys
-from time import sleep
+import time
+from typing import Set, List, Optional
 import validators
+import requests
+from bs4 import BeautifulSoup
+from requests.exceptions import RequestException
+import json
+import shutil
+from datetime import datetime
+import signal
 
+from config import Colors, ScanConfig, APIConfig, CustomScanConfig
+from exceptions import AuthenticationError, ScanError, OutputError, ValidationError
 
-class bcolors:
-    BLUE = '\033[94m'
-    GREEN = '\033[92m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
+class PrettyReconScanner:
+    def __init__(self, config: ScanConfig):
+        self.config = config
+        self.session = self._init_session()
+        self.running_jobs: Set[str] = set()
+        self.job_list: List[str] = []
+        self.base_url = f'{APIConfig.BASE_URL}/target/{config.target}'
+        self._interrupted = False
+        self._current_scan = None
+        signal.signal(signal.SIGINT, self._signal_handler)
 
-def login():
-
-    url='https://prettyrecon.com/login/'
-    s.get(url, headers=headers)
-    csrftoken = s.cookies.get_dict()['csrftoken']
-    logindata = {"csrfmiddlewaretoken": csrftoken, "email": email, "password": password}
-    loginreq = s.post(url, headers=headers, data=logindata)
-    if 'Invalid credentials' in str(loginreq.content):
-        print(bcolors.FAIL + "Login Failed: Wrong credentials, please check config." + bcolors.ENDC)
-        sys.exit()
-    elif 'Dashboard Summary' and 'Sign Out' in str(loginreq.content):
-        print(bcolors.GREEN + "Login Success!" + bcolors.ENDC)
-    else:
-        print(bcolors.FAIL + 'Unknown Error!' + bcolors.ENDC)
-        sys.exit()
-    sleep(2)
-
-def initjob(flag):
-
-    if flag==0:
-       currjob = re.findall(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', str(s.get(jobs, headers=headers).text))
-       for id in currjob:
-            runningjobs.add(id)
-    elif flag==1:
-        currjob = re.findall(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', str(s.get(jobs, headers=headers).text))
-        ujobs = set()
-        for id in currjob:
-            ujobs.add(id)
-        for id in ujobs:
-            if id not in runningjobs:
-                    print("Job with ID "+id+" Started!")
-                    joblist.append(id)
-
-def job():
-
-    status=True
-    while status==True:
-        currjobs = re.findall(r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}', str(s.get(jobs, headers=headers).text))
-        if any(item in joblist for item in currjobs):
-            status=True
-            sys.stdout.write('■')
-            sys.stdout.flush()
-            sleep(5)
+    def _signal_handler(self, signum, frame):
+        """Handle Ctrl+C gracefully"""
+        if self._current_scan:
+            print(f"\n{Colors.YELLOW}Interrupted while fetching {self._current_scan}. Saving partial results...{Colors.ENDC}")
+            self._interrupted = True
         else:
-            status=False
-            break
+            print(f"\n{Colors.YELLOW}Interrupted. Exiting...{Colors.ENDC}")
+            sys.exit(0)
 
-def deltemp():
+    def _init_session(self) -> requests.Session:
+        """Initialize requests session with default headers"""
+        session = requests.Session()
+        session.headers.update(APIConfig.HEADERS)
+        return session
 
-    if os.path.exists(os.path.join(str(dir), ".temp.html")):
-        os.remove(os.path.join(str(dir), ".temp.html"))
+    def _get_common_headers(self, referer: str) -> dict:
+        """Get common headers for API requests"""
+        return {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Origin': APIConfig.BASE_URL,
+            'Referer': referer,
+            'X-Csrftoken': self.session.cookies.get('csrftoken', '')
+        }
 
+    def _get_request_data(self, start: int, length: int, num_columns: int = 4) -> dict:
+        """Generate common request data structure for API calls"""
+        data = {
+            'draw': '1',
+            'order[0][column]': '0',
+            'order[0][dir]': 'asc',
+            'start': str(start),
+            'length': str(length),
+            'search[value]': '',
+            'search[regex]': 'false',
+            'iindex': '0',
+            'isearch[]': '',
+            'eindex': '0',
+            'esearch[]': ''
+        }
+        
+        # Add column definitions
+        for i in range(num_columns):
+            data.update({
+                f'columns[{i}][data]': str(i),
+                f'columns[{i}][name]': '',
+                f'columns[{i}][searchable]': 'true',
+                f'columns[{i}][orderable]': 'true',
+                f'columns[{i}][search][value]': '',
+                f'columns[{i}][search][regex]': 'false'
+            })
+        
+        return data
 
-def sub():
+    def _fetch_paginated_data(self, endpoint: str, headers: dict, request_data_func, output_file: str, scan_name: str) -> None:
+        """Fetch paginated data from an API endpoint"""
+        self._current_scan = scan_name
+        self._interrupted = False
+        
+        try:
+            # Get initial response to determine total records
+            response = self.session.post(
+                endpoint,
+                headers=headers,
+                data=request_data_func(0, 100),
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
 
-    print(bcolors.BOLD + "Subdomain Enumeration..." + bcolors.ENDC)
-    targetinfo=baseurl
-    subinfo=baseurl+'/subdomains/'
-    s.get(targetinfo, headers=headers)
-    sleep(1)
-    s.get(subinfo, headers=headers)
-    initjob(1)
-    if args.output:
-        job()
-        soup = BeautifulSoup(s.get(subinfo, headers=headers).content, "html.parser")
-        subjson = (soup.find_all('script')[10])
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(subjson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data = JSON.parse" in line: open(os.path.join(dir, "subdomains.json"), 'w').write(line.strip()[23:-3].encode().decode('unicode-escape'))
+            if not response.ok:
+                print(f"{Colors.FAIL}Error: Received status code {response.status_code}{Colors.ENDC}")
+                print(f"Response content: {response.text[:500]}...")
+                raise ScanError(f"{scan_name} API request failed with status code {response.status_code}")
 
+            try:
+                data = response.json()
+                total_records = data.get('recordsFiltered', 0)
+                print(f"{Colors.BLUE}Found {total_records} {scan_name}{Colors.ENDC}")
 
-def basic():
+                # Initialize list to store all records
+                all_records = []
 
-    dnsinfo=baseurl+'/dns/'
-    ports=baseurl+'/ports/'
-    urls=baseurl+'/wayback_urls/'
+                # Fetch all pages
+                for start in range(0, total_records, 100):
+                    if self._interrupted:
+                        break
+                        
+                    print(f"{Colors.BLUE}Fetching {scan_name} {start+1}-{min(start+100, total_records)}{Colors.ENDC}")
+                    print(f"{Colors.YELLOW}Press Ctrl+C to skip remaining records{Colors.ENDC}")
+                    
+                    response = self.session.post(
+                        endpoint,
+                        headers=headers,
+                        data=request_data_func(start, 100),
+                        timeout=APIConfig.REQUEST_TIMEOUT
+                    )
+                    
+                    if not response.ok:
+                        print(f"{Colors.FAIL}Error: Received status code {response.status_code}{Colors.ENDC}")
+                        print(f"Response content: {response.text[:500]}...")
+                        raise ScanError(f"{scan_name} API request failed with status code {response.status_code}")
+                    
+                    try:
+                        page_data = response.json()
+                        if 'data' in page_data:
+                            all_records.extend(page_data['data'])
+                        else:
+                            print(f"{Colors.YELLOW}Warning: No 'data' field in response{Colors.ENDC}")
+                            print(f"Response content: {response.text[:500]}...")
+                    except json.JSONDecodeError as e:
+                        print(f"{Colors.FAIL}Error: Invalid JSON response{Colors.ENDC}")
+                        print(f"Response content: {response.text[:500]}...")
+                        raise ScanError(f"Failed to parse {scan_name} JSON response: {str(e)}")
+                    
+                    time.sleep(1)  # Be nice to the API
 
-    print(bcolors.BOLD + "DNS Info..." + bcolors.ENDC)
-    s.get(dnsinfo, headers=headers)
-    sleep(1)
-    print(bcolors.BOLD + "Port Scan..." + bcolors.ENDC)
-    s.get(ports, headers=headers)
-    sleep(1)
-    print(bcolors.BOLD + "Waybackurls..." + bcolors.ENDC)
-    s.get(urls, headers=headers)
-    sleep(1)
-    initjob(1)
-    if args.output:
-        job()
-        dnssoup = BeautifulSoup(s.get(dnsinfo, headers=headers).content, "html.parser")
-        portsoup = BeautifulSoup(s.get(ports, headers=headers).content, "html.parser")
-        dnsjson = (dnssoup.find_all('script')[10])
-        portjson = (portsoup.find_all('script')[10])
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(dnsjson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "dnsinfo.json"), 'w').write(line.strip()[11:-1].encode().decode('unicode-escape'))
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(portjson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "ports.json"), 'w').write(line.strip()[11:-1].encode().decode('unicode-escape'))
-        urldownload = s.get(url = urls+'?download=txt', allow_redirects=True)
-        open(os.path.join(dir, 'waybackurls.txt'), 'wb').write(urldownload.content)
+                # Create final data structure
+                final_data = {
+                    'data': all_records,
+                    'recordsTotal': total_records,
+                    'recordsFiltered': total_records,
+                    'partial_fetch': self._interrupted
+                }
+                self.save_json_output(final_data, output_file)
+                
+                if self._interrupted:
+                    print(f"{Colors.YELLOW}Successfully saved {len(all_records)} {scan_name} (partial results){Colors.ENDC}")
+                else:
+                    print(f"{Colors.GREEN}Successfully saved {len(all_records)} {scan_name}{Colors.ENDC}")
 
+            except json.JSONDecodeError as e:
+                print(f"{Colors.FAIL}Error: Invalid JSON response{Colors.ENDC}")
+                print(f"Response content: {response.text[:500]}...")
+                raise ScanError(f"Failed to parse {scan_name} JSON response: {str(e)}")
 
-def vuln():
+        finally:
+            self._current_scan = None
 
-    exposed=baseurl+'/exposed_secrets/'
-    webscan=baseurl+'/web_scanner/'
+    def login(self) -> None:
+        """Authenticate with PrettyRecon"""
+        try:
+            response = self.session.get(
+                APIConfig.LOGIN_URL,
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
+            csrf_token = self.session.cookies.get('csrftoken')
+            
+            email, password = APIConfig.get_credentials()
+            login_data = {
+                "csrfmiddlewaretoken": csrf_token,
+                "email": email,
+                "password": password
+            }
+            
+            response = self.session.post(
+                APIConfig.LOGIN_URL,
+                data=login_data,
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
+            
+            if 'Invalid credentials' in response.text:
+                raise AuthenticationError("Login failed: Invalid credentials")
+            elif 'Dashboard Summary' not in response.text:
+                raise AuthenticationError("Login failed: Unexpected response")
+                
+            print(f"{Colors.GREEN}Login successful!{Colors.ENDC}")
+            time.sleep(2)  # Allow session to stabilize
+            
+        except RequestException as e:
+            raise AuthenticationError(f"Network error during login: {str(e)}")
 
-    print(bcolors.BOLD + "Scanning for security misconfigurations..." + bcolors.ENDC)
-    s.get(webscan, headers=headers)
-    sleep(1)
-    print(bcolors.BOLD + "Scanning for exposed secrets..." + bcolors.ENDC)
-    s.get(exposed, headers=headers)
-    sleep(1)
-    initjob(1)
-    if args.output:
-        job()
-        miscsoup = BeautifulSoup(s.get(webscan, headers=headers).content , "html.parser")
-        exposedsoup = BeautifulSoup(s.get(exposed, headers=headers).content , "html.parser")
-        tkojson = (tkosoup.find_all('script')[10])
-        cvejson = (cvesoup.find_all('script')[10])
-        commonjson = (commonsoup.find_all('script')[10])
-        exposedjson = (exposedsoup.find_all('script')[10])
-        miscjson = (miscsoup.find_all('script')[10])
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(tkojson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "subtko.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(cvejson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "cves.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(commonjson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "common_vulns.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(exposedjson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "exposed_creds.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))
-        open(os.path.join(dir, ".temp.html"), 'w').write(str(miscjson))
-        for line in open(os.path.join(dir, ".temp.html"), 'r'):
-            if "var data =" in line: open(os.path.join(dir, "misc_vulns.json"), 'w').write(line.strip()[12:-2].encode().decode('unicode-escape'))     
+    def _init_jobs(self, flag: int = 0) -> None:
+        """Initialize or update job tracking"""
+        try:
+            response = self.session.get(
+                APIConfig.JOBS_URL,
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
+            current_jobs = set(self._extract_job_ids(response.text))
+            
+            if flag == 0:
+                self.running_jobs = current_jobs
+            else:
+                new_jobs = current_jobs - self.running_jobs
+                for job_id in new_jobs:
+                    print(f"Job with ID {job_id} Started!")
+                    self.job_list.append(job_id)
+                    
+        except RequestException as e:
+            raise ScanError(f"Error tracking jobs: {str(e)}")
 
+    def _extract_job_ids(self, content: str) -> List[str]:
+        """Extract job IDs from response content"""
+        import re
+        pattern = r'[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'
+        return re.findall(pattern, content)
 
-def CustomSumScan():
-    if os.path.exists(args.customsubscan):
-            url = "https://prettyrecon.com/tools/custom_subdomains/"
-            if not os.path.exists('Splits'):
-                os.makedirs('Splits')
-            filename=args.customsubscan
-            split = Split(inputfile=filename, outputdir='Splits')
-            split.bylinecount(300)
-            _, _, files = next(os.walk("Splits"))
-            file_count = len(files)
-            n = 1
-            while file_count != 1:
-                dt = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                file = open(os.path.splitext('Splits/'+filename)[0]+"_"+str(n)+os.path.splitext('Splits/'+filename)[1])
-                datap = file.read().replace('\n', '\r\n')
-                s.get(url, headers=headers)
-                csrftoken = s.cookies.get_dict()['csrftoken']
-                data = {"csrfmiddlewaretoken": csrftoken, "scan_name": "CliScan "+ dt, "targets": datap}
-                req = s.post(url, headers=headers, data=data, allow_redirects=False)
-                initjob(1)
-                job()
-                file_count-=1
-                n+=1
-            shutil.rmtree("Splits") 
-            print("\nCustomSubScan Finished!")   
-    else:
-        print(bcolors.FAIL + "Path/File at "+args.customsubscan+"not found!" + bcolors.ENDC)
-        sys.exit()
+    def _monitor_jobs(self) -> None:
+        """Monitor running jobs until completion"""
+        try:
+            while True:
+                response = self.session.get(
+                    APIConfig.JOBS_URL,
+                    timeout=APIConfig.REQUEST_TIMEOUT
+                )
+                current_jobs = self._extract_job_ids(response.text)
+                
+                if not any(job_id in self.job_list for job_id in current_jobs):
+                    break
+                    
+                sys.stdout.write('■')
+                sys.stdout.flush()
+                time.sleep(5)
+                
+        except RequestException as e:
+            raise ScanError(f"Error monitoring jobs: {str(e)}")
 
+    def save_json_output(self, data: dict, filename: str) -> None:
+        """Save JSON data to output directory"""
+        if self.config.output_dir:
+            try:
+                self.config.output_dir.mkdir(parents=True, exist_ok=True)
+                output_file = self.config.output_dir / filename
+                
+                with output_file.open('w') as f:
+                    json.dump(data, f, indent=2)
+                    
+            except (OSError, IOError) as e:
+                raise OutputError(f"Error saving to {filename}: {str(e)}")
+
+    def subdomain_scan(self) -> None:
+        """Perform subdomain enumeration with pagination support"""
+        print(f"{Colors.BOLD}Subdomain Enumeration...{Colors.ENDC}")
+        
+        try:
+            # Initialize scan
+            self.session.get(f"{self.base_url}", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+            
+            headers = self._get_common_headers(f"{self.base_url}/subdomains/")
+            
+            def get_request_data(start: int, length: int) -> dict:
+                return self._get_request_data(start, length, num_columns=9)
+            
+            self._init_jobs(1)
+            
+            if self.config.output:
+                self._monitor_jobs()
+                self._fetch_paginated_data(
+                    f"{APIConfig.BASE_URL}/api/data/subdomains/{self.config.target}",
+                    headers,
+                    get_request_data,
+                    "subdomains.json",
+                    "subdomains"
+                )
+                
+        except Exception as e:
+            raise ScanError(f"Subdomain scan failed: {str(e)}")
+
+    def basic_scan(self) -> None:
+        """Perform basic reconnaissance scan"""
+        try:
+            # Initialize scans
+            print(f"{Colors.BOLD}DNS Info...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/dns/", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+
+            print(f"{Colors.BOLD}Port Scan...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/ports/", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+
+            print(f"{Colors.BOLD}Waybackurls...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/wayback_urls/", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+
+            self._init_jobs(1)
+
+            if self.config.output:
+                self._monitor_jobs()
+
+                # DNS scan
+                headers = self._get_common_headers(f"{self.base_url}/dns_scan/")
+                self._fetch_paginated_data(
+                    f"{APIConfig.BASE_URL}/api/data/dns_scan/{self.config.target}",
+                    headers,
+                    lambda start, length: self._get_request_data(start, length, num_columns=4),
+                    "dnsinfo.json",
+                    "DNS records"
+                )
+
+                # Ports scan
+                headers = self._get_common_headers(f"{self.base_url}/ports/")
+                self._fetch_paginated_data(
+                    f"{APIConfig.BASE_URL}/api/data/ports/{self.config.target}",
+                    headers,
+                    lambda start, length: self._get_request_data(start, length, num_columns=3),
+                    "ports.json",
+                    "ports"
+                )
+
+                # Wayback URLs scan
+                headers = self._get_common_headers(f"{self.base_url}/wayback_urls/")
+                def get_wayback_request_data(start: int, length: int) -> dict:
+                    data = self._get_request_data(start, length, num_columns=1)
+                    data['filter'] = '0'
+                    return data
+                
+                self._fetch_paginated_data(
+                    f"{APIConfig.BASE_URL}/api/data/urls/{self.config.target}",
+                    headers,
+                    get_wayback_request_data,
+                    "waybackurls.json",
+                    "wayback URLs"
+                )
+
+        except Exception as e:
+            raise ScanError(f"Basic scan failed: {str(e)}")
+
+    def vulnerability_scan(self) -> None:
+        """Perform vulnerability scan"""
+        try:
+            # Initialize scans
+            print(f"{Colors.BOLD}Scanning for security misconfigurations...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/common_vulnerability/", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+
+            print(f"{Colors.BOLD}Scanning for exposed secrets...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/exposed_secrets/", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+
+            print(f"{Colors.BOLD}Scanning for CVEs...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/cves/", timeout=APIConfig.REQUEST_TIMEOUT)
+            time.sleep(1)
+
+            self._init_jobs(1)
+
+            if self.config.output:
+                self._monitor_jobs()
+
+                # Scan configurations
+                scan_configs = [
+                    {
+                        'name': 'exposed secrets',
+                        'endpoint': f"{APIConfig.BASE_URL}/api/data/exposed_secrets/{self.config.target}",
+                        'referer': f"{self.base_url}/exposed_secrets/",
+                        'output_file': 'exposed_creds.json'
+                    },
+                    {
+                        'name': 'CVEs',
+                        'endpoint': f"{APIConfig.BASE_URL}/api/data/cves/{self.config.target}",
+                        'referer': f"{self.base_url}/cves/",
+                        'output_file': 'cves.json'
+                    },
+                    {
+                        'name': 'common vulnerabilities',
+                        'endpoint': f"{APIConfig.BASE_URL}/api/data/common_vulnerability/{self.config.target}",
+                        'referer': f"{self.base_url}/common_vulnerability/",
+                        'output_file': 'common_vulns.json'
+                    }
+                ]
+
+                # Process each scan type
+                for config in scan_configs:
+                    print(f"{Colors.BOLD}Fetching {config['name']}...{Colors.ENDC}")
+                    headers = self._get_common_headers(config['referer'])
+                    self._fetch_paginated_data(
+                        config['endpoint'],
+                        headers,
+                        lambda start, length: self._get_request_data(start, length, num_columns=4),
+                        config['output_file'],
+                        config['name']
+                    )
+
+        except Exception as e:
+            raise ScanError(f"Vulnerability scan failed: {str(e)}")
+
+    def run(self) -> None:
+        """Main execution flow"""
+        try:
+            self.login()
+            self._init_jobs(0)
+            
+            scan_types = {
+                'all': [self.subdomain_scan, self.basic_scan, self.vulnerability_scan],
+                'basic': [self.subdomain_scan, self.basic_scan],
+                'vuln': [self.subdomain_scan, self.vulnerability_scan],
+                'sub': [self.subdomain_scan]
+            }
+            
+            scan_functions = scan_types.get(self.config.scan_type.lower())
+            if not scan_functions:
+                raise ValidationError(f"Invalid scan type: {self.config.scan_type}")
+                
+            for scan_func in scan_functions:
+                scan_func()
+                
+        except Exception as e:
+            print(f"{Colors.FAIL}Scan failed: {str(e)}{Colors.ENDC}")
+            sys.exit(1)
 
 def main():
-
-    if args.customsubscan:
-        login()
-        initjob(0)
-        CustomSumScan()
-    elif args.target and args.scan_type:
-        if (type=='all'):
-            login()
-            initjob(0)
-            sub()
-            basic()
-            vuln()
-            deltemp()
-        elif (type=='basic'):
-            login()
-            initjob(0)
-            sub()
-            basic()
-            deltemp()
-        elif (type=='vuln'):
-            login()
-            initjob(0)
-            sub()
-            vuln()
-            deltemp()
-        elif (type=='sub'):
-            login()
-            initjob(0)
-            sub()
-            deltemp()
-        else:
-            print(bcolors.FAIL + "Please select a valid scan type, i.e all,basic,vuln,sub." + bcolors.ENDC)
-            sys.exit()
-    else:
-        print(bcolors.FAIL + "Please pass valid arguments! i.e. Either '-t' and '-st' for normal scan OR '-cscn' for CustomSubScan" + bcolors.ENDC)
-        sys.exit()
-
-
-
-if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PrettyRecon CLI')
     parser.add_argument("-t", "--target", help="Supply the target to scan.")
-    parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only", required='--target' in sys.argv)
-    parser.add_argument("-o", "--output", help="Saves output to output/*.json file.",nargs='?', const='1')
+    parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only")
+    parser.add_argument("-o", "--output", help="Saves output to output/*.json file.", action='store_true')
     parser.add_argument("-cscn", "--customsubscan", help="For the CustomSubScan feature of PrettyRecon. Pass filename after flag.")
+    
     args = parser.parse_args()
-    target = str(args.target)
-    type = args.scan_type
-    if args.output is not None:
-        dir = 'output'+"/"+target
-        if not os.path.exists(dir):
-            os.makedirs(dir)
-    s = requests.Session()
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.93 Safari/537.36", "Content-Type": "application/x-www-form-urlencoded", "Origin": "https://prettyrecon.com"}
-    jobs='https://prettyrecon.com/tasks/'
-    runningjobs = set()
-    joblist=[]
-    if args.target and (args.scan_type is None):
-        parser.error("Missing argument '-st/--scan_type' ")
-    elif args.target:
-        if validators.domain(target):
-            baseurl='https://prettyrecon.com/target/'+target
-        else:
-           print(bcolors.FAIL + "Check the target and try again!\nExample of a valid target: example.com [Without http(s) and '/']" + bcolors.ENDC)
-           sys.exit()
+    
+    # Validate arguments
+    if args.target and not args.scan_type:
+        parser.error("Missing argument '-st/--scan_type'")
+        
+    if args.target and not validators.domain(args.target):
+        print(f"{Colors.FAIL}Invalid target format. Example: example.com [Without http(s) and '/']{Colors.ENDC}")
+        sys.exit(1)
+        
+    # Create configuration
+    config = ScanConfig(
+        target=args.target,
+        scan_type=args.scan_type,
+        output=bool(args.output),
+        custom_subscan_file=Path(args.customsubscan) if args.customsubscan else None
+    )
+    
+    # Initialize and run scanner
+    scanner = PrettyReconScanner(config)
+    scanner.run()
+
+if __name__ == '__main__':
     main()
