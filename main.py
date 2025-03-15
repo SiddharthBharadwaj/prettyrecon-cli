@@ -11,11 +11,66 @@ import json
 import shutil
 from datetime import datetime
 import signal
+import uuid
 
 from config import Colors, ScanConfig, APIConfig, CustomScanConfig
 from exceptions import AuthenticationError, ScanError, OutputError, ValidationError
 
 class PrettyReconScanner:
+    # Common scan configurations
+    SCAN_CONFIGS = {
+        'subdomains': {
+            'name': 'subdomains',
+            'endpoint': 'subdomains',
+            'output_file': 'subdomains.json',
+            'columns': 9
+        },
+        'dns_scan': {
+            'name': 'DNS records',
+            'endpoint': 'dns_scan',
+            'output_file': 'dnsinfo.json',
+            'columns': 4
+        },
+        'ports': {
+            'name': 'ports',
+            'endpoint': 'ports',
+            'output_file': 'ports.json',
+            'columns': 3
+        },
+        'wayback_urls': {
+            'name': 'wayback URLs',
+            'endpoint': 'urls',
+            'output_file': 'waybackurls.json',
+            'columns': 1
+        },
+        'common_vulnerability': {
+            'name': 'common vulnerabilities',
+            'endpoint': 'common_vulnerability',
+            'output_file': 'common_vulns.json',
+            'columns': 4
+        },
+        'exposed_secrets': {
+            'name': 'exposed secrets',
+            'endpoint': 'exposed_secrets',
+            'output_file': 'exposed_creds.json',
+            'columns': 4
+        },
+        'cves': {
+            'name': 'CVEs',
+            'endpoint': 'cves',
+            'output_file': 'cves.json',
+            'columns': 4
+        }
+    }
+
+    SCAN_TYPE_PATHS = {
+        'sub': ['subdomains'],
+        'basic': ['subdomains', 'dns_scan', 'ports', 'wayback_urls'],
+        'vuln': ['subdomains', 'common_vulnerability', 'exposed_secrets', 'cves'],
+        'all': ['subdomains', 'dns_scan', 'ports', 'wayback_urls', 
+                'common_vulnerability', 'exposed_secrets', 'cves']
+    }
+
     def __init__(self, config: ScanConfig):
         self.config = config
         self.session = self._init_session()
@@ -256,151 +311,93 @@ class PrettyReconScanner:
             except (OSError, IOError) as e:
                 raise OutputError(f"Error saving to {filename}: {str(e)}")
 
-    def subdomain_scan(self) -> None:
-        """Perform subdomain enumeration with pagination support"""
-        print(f"{Colors.BOLD}Subdomain Enumeration...{Colors.ENDC}")
-        
-        try:
-            # Initialize scan
-            self.session.get(f"{self.base_url}", timeout=APIConfig.REQUEST_TIMEOUT)
-            time.sleep(1)
+    def _fetch_scan_data(self, scan_paths: list) -> None:
+        """Fetch data for given scan paths"""
+        if not self.config.output:
+            return
+
+        for scan_path in scan_paths:
+            if scan_path not in self.SCAN_CONFIGS:
+                continue
+
+            config = self.SCAN_CONFIGS[scan_path]
+            print(f"\n{Colors.BOLD}Fetching {config['name']}...{Colors.ENDC}")
             
-            headers = self._get_common_headers(f"{self.base_url}/subdomains/")
+            endpoint = f"{APIConfig.BASE_URL}/api/data/{config['endpoint']}/{self.config.target}"
+            referer = f"{self.base_url}/{scan_path}/"
+            headers = self._get_common_headers(referer)
             
-            def get_request_data(start: int, length: int) -> dict:
-                return self._get_request_data(start, length, num_columns=9)
-            
-            self._init_jobs(1)
-            
-            if self.config.output:
-                self._monitor_jobs()
-                self._fetch_paginated_data(
-                    f"{APIConfig.BASE_URL}/api/data/subdomains/{self.config.target}",
-                    headers,
-                    get_request_data,
-                    "subdomains.json",
-                    "subdomains"
-                )
+            self._fetch_paginated_data(
+                endpoint,
+                headers,
+                lambda start, length: self._get_request_data(start, length, num_columns=config['columns']),
+                config['output_file'],
+                config['name']
+            )
+
+    def _initialize_scans(self, scan_paths: list) -> None:
+        """Initialize scans for given paths"""
+        for scan_path in scan_paths:
+            if scan_path not in self.SCAN_CONFIGS:
+                continue
                 
-        except Exception as e:
-            raise ScanError(f"Subdomain scan failed: {str(e)}")
-
-    def basic_scan(self) -> None:
-        """Perform basic reconnaissance scan"""
-        try:
-            # Initialize scans
-            print(f"{Colors.BOLD}DNS Info...{Colors.ENDC}")
-            self.session.get(f"{self.base_url}/dns/", timeout=APIConfig.REQUEST_TIMEOUT)
+            config = self.SCAN_CONFIGS[scan_path]
+            print(f"{Colors.BOLD}Scanning for {config['name']}...{Colors.ENDC}")
+            self.session.get(f"{self.base_url}/{scan_path}/", timeout=APIConfig.REQUEST_TIMEOUT)
             time.sleep(1)
-
-            print(f"{Colors.BOLD}Port Scan...{Colors.ENDC}")
-            self.session.get(f"{self.base_url}/ports/", timeout=APIConfig.REQUEST_TIMEOUT)
-            time.sleep(1)
-
-            print(f"{Colors.BOLD}Waybackurls...{Colors.ENDC}")
-            self.session.get(f"{self.base_url}/wayback_urls/", timeout=APIConfig.REQUEST_TIMEOUT)
-            time.sleep(1)
-
-            self._init_jobs(1)
-
-            if self.config.output:
-                self._monitor_jobs()
-
-                # DNS scan
-                headers = self._get_common_headers(f"{self.base_url}/dns_scan/")
-                self._fetch_paginated_data(
-                    f"{APIConfig.BASE_URL}/api/data/dns_scan/{self.config.target}",
-                    headers,
-                    lambda start, length: self._get_request_data(start, length, num_columns=4),
-                    "dnsinfo.json",
-                    "DNS records"
-                )
-
-                # Ports scan
-                headers = self._get_common_headers(f"{self.base_url}/ports/")
-                self._fetch_paginated_data(
-                    f"{APIConfig.BASE_URL}/api/data/ports/{self.config.target}",
-                    headers,
-                    lambda start, length: self._get_request_data(start, length, num_columns=3),
-                    "ports.json",
-                    "ports"
-                )
-
-                # Wayback URLs scan
-                headers = self._get_common_headers(f"{self.base_url}/wayback_urls/")
-                def get_wayback_request_data(start: int, length: int) -> dict:
-                    data = self._get_request_data(start, length, num_columns=1)
-                    data['filter'] = '0'
-                    return data
-                
-                self._fetch_paginated_data(
-                    f"{APIConfig.BASE_URL}/api/data/urls/{self.config.target}",
-                    headers,
-                    get_wayback_request_data,
-                    "waybackurls.json",
-                    "wayback URLs"
-                )
-
-        except Exception as e:
-            raise ScanError(f"Basic scan failed: {str(e)}")
 
     def vulnerability_scan(self) -> None:
         """Perform vulnerability scan"""
         try:
-            # Initialize scans
-            print(f"{Colors.BOLD}Scanning for security misconfigurations...{Colors.ENDC}")
-            self.session.get(f"{self.base_url}/common_vulnerability/", timeout=APIConfig.REQUEST_TIMEOUT)
-            time.sleep(1)
-
-            print(f"{Colors.BOLD}Scanning for exposed secrets...{Colors.ENDC}")
-            self.session.get(f"{self.base_url}/exposed_secrets/", timeout=APIConfig.REQUEST_TIMEOUT)
-            time.sleep(1)
-
-            print(f"{Colors.BOLD}Scanning for CVEs...{Colors.ENDC}")
-            self.session.get(f"{self.base_url}/cves/", timeout=APIConfig.REQUEST_TIMEOUT)
-            time.sleep(1)
-
+            scan_paths = self.SCAN_TYPE_PATHS['vuln'][1:]  # Exclude subdomains
+            self._initialize_scans(scan_paths)
+            
             self._init_jobs(1)
-
             if self.config.output:
                 self._monitor_jobs()
-
-                # Scan configurations
-                scan_configs = [
-                    {
-                        'name': 'exposed secrets',
-                        'endpoint': f"{APIConfig.BASE_URL}/api/data/exposed_secrets/{self.config.target}",
-                        'referer': f"{self.base_url}/exposed_secrets/",
-                        'output_file': 'exposed_creds.json'
-                    },
-                    {
-                        'name': 'CVEs',
-                        'endpoint': f"{APIConfig.BASE_URL}/api/data/cves/{self.config.target}",
-                        'referer': f"{self.base_url}/cves/",
-                        'output_file': 'cves.json'
-                    },
-                    {
-                        'name': 'common vulnerabilities',
-                        'endpoint': f"{APIConfig.BASE_URL}/api/data/common_vulnerability/{self.config.target}",
-                        'referer': f"{self.base_url}/common_vulnerability/",
-                        'output_file': 'common_vulns.json'
-                    }
-                ]
-
-                # Process each scan type
-                for config in scan_configs:
-                    print(f"{Colors.BOLD}Fetching {config['name']}...{Colors.ENDC}")
-                    headers = self._get_common_headers(config['referer'])
-                    self._fetch_paginated_data(
-                        config['endpoint'],
-                        headers,
-                        lambda start, length: self._get_request_data(start, length, num_columns=4),
-                        config['output_file'],
-                        config['name']
-                    )
-
+                self._fetch_scan_data(scan_paths)
+                
         except Exception as e:
             raise ScanError(f"Vulnerability scan failed: {str(e)}")
+
+    def basic_scan(self) -> None:
+        """Perform basic reconnaissance scan"""
+        try:
+            scan_paths = self.SCAN_TYPE_PATHS['basic'][1:]  # Exclude subdomains
+            self._initialize_scans(scan_paths)
+            
+            self._init_jobs(1)
+            if self.config.output:
+                self._monitor_jobs()
+                self._fetch_scan_data(scan_paths)
+                
+        except Exception as e:
+            raise ScanError(f"Basic scan failed: {str(e)}")
+
+    def rescan(self) -> None:
+        """Retrigger scans based on scan type"""
+        print(f"{Colors.BOLD}Retriggering scans for type: {self.config.scan_type}...{Colors.ENDC}")
+        
+        scan_paths = self.SCAN_TYPE_PATHS.get(self.config.scan_type.lower(), [])
+        if not scan_paths:
+            raise ValidationError(f"Invalid scan type for rescan: {self.config.scan_type}")
+        
+        # Check and handle running tasks first
+        self._wait_for_tasks(scan_paths)
+        
+        # Reset job tracking and trigger rescans
+        self._init_jobs(0)
+        for scan_path in scan_paths:
+            self._trigger_rescan(scan_path)
+            time.sleep(2)
+        
+        # Initialize new jobs and monitor them
+        if self.config.output:
+            self._init_jobs(1)
+            print(f"\n{Colors.BOLD}Waiting for scans to complete...{Colors.ENDC}")
+            self._monitor_jobs()
+            print(f"\n{Colors.BOLD}Fetching scan results...{Colors.ENDC}")
+            self._fetch_scan_data(scan_paths)
 
     def _trigger_rescan(self, scan_path: str) -> None:
         """Trigger a rescan for a specific scan type"""
@@ -438,47 +435,238 @@ class PrettyReconScanner:
         except Exception as e:
             print(f"{Colors.FAIL}Error triggering rescan for {scan_path}: {str(e)}{Colors.ENDC}")
 
-    def rescan(self) -> None:
-        """Retrigger scans based on scan type"""
-        print(f"{Colors.BOLD}Retriggering scans for type: {self.config.scan_type}...{Colors.ENDC}")
+    def _get_running_tasks(self) -> list:
+        """Get list of currently running tasks"""
+        try:
+            response = self.session.get(
+                APIConfig.JOBS_URL,
+                headers={'Upgrade-Insecure-Requests': '1'},
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
+            
+            if not response.ok:
+                print(f"{Colors.FAIL}Failed to fetch running tasks: {response.status_code}{Colors.ENDC}")
+                return []
+            
+            # Parse HTML response using BeautifulSoup
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            tasks = []
+            for task_div in soup.find_all('div', class_='p-5 rounded-lg flex flex-col gap-4'):
+                domain = task_div.find('p', class_='font-bold text-xl')
+                if not domain:
+                    continue
+                
+                domain_text = domain.text.strip()
+                if domain_text != self.config.target:
+                    continue
+                
+                scan_type = task_div.find('span', class_='p-2')
+                if not scan_type:
+                    continue
+                
+                stop_button = task_div.find('button')
+                if not stop_button:
+                    continue
+                
+                task_id = None
+                onclick = stop_button.get('@click', '')
+                import re
+                match = re.search(r"'([a-f0-9-]+)'", onclick)
+                if match:
+                    task_id = match.group(1)
+                
+                tasks.append({
+                    'domain': domain_text,
+                    'scan_type': scan_type.text.strip(),
+                    'task_id': task_id
+                })
+            
+            return tasks
+            
+        except Exception as e:
+            print(f"{Colors.FAIL}Error fetching running tasks: {str(e)}{Colors.ENDC}")
+            return []
+
+    def _stop_task(self, task_id: str) -> bool:
+        """Stop a running task"""
+        try:
+            csrf_token = self.session.cookies.get('csrftoken', '')
+            stop_url = f"{APIConfig.BASE_URL}/tasks/"
+            
+            data = {
+                'csrfmiddlewaretoken': csrf_token,
+                'task_id': task_id,
+                'action': 'stop'
+            }
+            
+            headers = {
+                'Origin': APIConfig.BASE_URL,
+                'Referer': stop_url,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            
+            response = self.session.post(
+                stop_url,
+                data=data,
+                headers=headers,
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
+            
+            if response.ok:
+                print(f"{Colors.GREEN}Successfully stopped task {task_id}{Colors.ENDC}")
+                return True
+            else:
+                print(f"{Colors.FAIL}Failed to stop task {task_id}: {response.status_code}{Colors.ENDC}")
+                return False
+            
+        except Exception as e:
+            print(f"{Colors.FAIL}Error stopping task {task_id}: {str(e)}{Colors.ENDC}")
+            return False
+
+    def _wait_for_tasks(self, scan_paths: list) -> None:
+        """Wait for running tasks to complete or stop them"""
+        if not self.config.output:
+            return
         
-        # Define scan paths for each scan type
-        scan_type_paths = {
-            'sub': ['subdomains'],
-            'basic': ['subdomains', 'dns_scan', 'ports', 'wayback_urls'],
-            'vuln': ['subdomains', 'common_vulnerability', 'exposed_secrets', 'cves'],
-            'all': ['subdomains', 'dns_scan', 'ports', 'wayback_urls', 
-                    'common_vulnerability', 'exposed_secrets', 'cves']
-        }
+        print(f"{Colors.BOLD}Checking for running tasks...{Colors.ENDC}")
         
-        scan_paths = scan_type_paths.get(self.config.scan_type.lower(), [])
-        if not scan_paths:
-            raise ValidationError(f"Invalid scan type for rescan: {self.config.scan_type}")
-        
-        for scan_path in scan_paths:
-            self._trigger_rescan(scan_path)
-            time.sleep(2)  # Add delay between rescans
+        while True:
+            tasks = self._get_running_tasks()
+            if not tasks:
+                break
+            
+            print(f"\nFound {len(tasks)} running tasks for {self.config.target}:")
+            for task in tasks:
+                print(f"- {task['scan_type']} (Task ID: {task['task_id']})")
+            
+            choice = input(f"\n{Colors.YELLOW}Do you want to stop these tasks? (y/n, default: y): {Colors.ENDC}").lower()
+            if choice != 'n':
+                for task in tasks:
+                    if task['task_id']:
+                        self._stop_task(task['task_id'])
+                break
+            
+            print(f"\n{Colors.BLUE}Waiting 10 seconds before checking again...{Colors.ENDC}")
+            time.sleep(10)
+
+    def custom_subdomain_scan(self) -> None:
+        """Perform custom subdomain scan with file input"""
+        try:
+            if not self.config.custom_subscan_file or not self.config.custom_subscan_file.exists():
+                raise ValidationError("Custom subscan file not found")
+            
+            # Read targets from file
+            with self.config.custom_subscan_file.open('r') as f:
+                targets = [line.strip() for line in f if line.strip()]
+            
+            if not targets:
+                raise ValidationError("No targets found in the file")
+            
+            # Generate scan name with UUID and timestamp
+            scan_name = f"autopretty-{uuid.uuid4()}-{int(datetime.now().timestamp())}"
+            
+            # Process targets in chunks of 300
+            chunk_size = 300
+            for i in range(0, len(targets), chunk_size):
+                chunk = targets[i:i + chunk_size]
+                
+                # Get CSRF token and session cookies
+                response = self.session.get(
+                    f"{APIConfig.BASE_URL}/tools/custom_subdomains/",
+                    headers={
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                        'Accept-Language': 'en-GB,en;q=0.9',
+                        'Cache-Control': 'max-age=0',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'same-origin',
+                        'Sec-Fetch-User': '?1',
+                        'Upgrade-Insecure-Requests': '1'
+                    },
+                    timeout=APIConfig.REQUEST_TIMEOUT
+                )
+                
+                if not response.ok:
+                    raise ScanError(f"Failed to access custom subdomains page: {response.status_code}")
+                
+                csrf_token = self.session.cookies.get('csrftoken', '')
+                if not csrf_token:
+                    raise ScanError("Failed to get CSRF token")
+                
+                # Prepare and send the request
+                data = {
+                    'csrfmiddlewaretoken': csrf_token,
+                    'scan_name': scan_name,
+                    'targets': '\r\n'.join(chunk)  # Use \r\n as in the working request
+                }
+                
+                headers = {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'Accept-Language': 'en-GB,en;q=0.9',
+                    'Cache-Control': 'max-age=0',
+                    'Origin': APIConfig.BASE_URL,
+                    'Referer': f"{APIConfig.BASE_URL}/tools/custom_subdomains/",
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'same-origin',
+                    'Sec-Fetch-User': '?1',
+                    'Upgrade-Insecure-Requests': '1'
+                }
+                
+                response = self.session.post(
+                    f"{APIConfig.BASE_URL}/tools/custom_subdomains/",
+                    data=data,
+                    headers=headers,
+                    timeout=APIConfig.REQUEST_TIMEOUT,
+                    allow_redirects=False
+                )
+                
+                if response.status_code == 302:
+                    scan_id = response.headers.get('Location', '').split('/')[-1]
+                    if scan_id:
+                        print(f"{Colors.GREEN}Successfully started custom scan batch {i//chunk_size + 1} "
+                              f"(targets {i+1}-{min(i+chunk_size, len(targets))}):{Colors.ENDC}")
+                        print(f"Scan Name: {scan_name}")
+                        print(f"Scan ID: {scan_id}")
+                    else:
+                        print(f"{Colors.FAIL}Failed to get scan ID from Location header{Colors.ENDC}")
+                else:
+                    print(f"{Colors.FAIL}Failed to start custom scan: {response.status_code}{Colors.ENDC}")
+                    if response.text:
+                        print(f"Response content: {response.text[:500]}...")
+                
+                time.sleep(2)  # Add delay between batches
+                
+        except Exception as e:
+            raise ScanError(f"Custom subdomain scan failed: {str(e)}")
 
     def run(self) -> None:
         """Main execution flow"""
         try:
             self.login()
-            self._init_jobs(0)
             
-            scan_types = {
-                'all': [self.subdomain_scan, self.basic_scan, self.vulnerability_scan],
-                'basic': [self.subdomain_scan, self.basic_scan],
-                'vuln': [self.subdomain_scan, self.vulnerability_scan],
-                'sub': [self.subdomain_scan]
-            }
-            
-            scan_functions = scan_types.get(self.config.scan_type.lower())
-            if not scan_functions:
-                raise ValidationError(f"Invalid scan type: {self.config.scan_type}")
+            if self.config.custom_subscan_file:
+                self.custom_subdomain_scan()
+            else:
+                self._init_jobs(0)
                 
-            for scan_func in scan_functions:
-                scan_func()
+                scan_types = {
+                    'all': [self.subdomain_scan, self.basic_scan, self.vulnerability_scan],
+                    'basic': [self.subdomain_scan, self.basic_scan],
+                    'vuln': [self.subdomain_scan, self.vulnerability_scan],
+                    'sub': [self.subdomain_scan]
+                }
                 
+                scan_functions = scan_types.get(self.config.scan_type.lower())
+                if not scan_functions:
+                    raise ValidationError(f"Invalid scan type: {self.config.scan_type}")
+                    
+                for scan_func in scan_functions:
+                    scan_func()
+                    
         except Exception as e:
             print(f"{Colors.FAIL}Scan failed: {str(e)}{Colors.ENDC}")
             sys.exit(1)
