@@ -4,13 +4,21 @@ A command-line interface for PrettyRecon, a web-based reconnaissance and securit
 
 ## Features
 
-- Subdomain enumeration
-- DNS information gathering
-- Port scanning
-- Wayback URL discovery
-- Security misconfiguration scanning
-- Exposed secrets detection
-- Custom subdomain scanning
+### Core Scanning Capabilities
+- **Subdomain Enumeration**: Comprehensive subdomain discovery
+- **DNS Information**: Detailed DNS record analysis
+- **Port Scanning**: Service and port identification
+- **Wayback URLs**: Historical URL discovery
+- **Vulnerability Assessment**: Security misconfiguration detection
+- **Secrets Detection**: Exposed credentials and sensitive information scanning
+- **Custom Subdomain Scanning**: Support for bulk scanning with custom target lists
+
+### Advanced Features
+- **Pagination Support**: Efficiently handle large datasets with automatic pagination
+- **Interrupt Handling**: Use Ctrl+C to gracefully stop scans and save partial results
+- **Job Management**: Monitor and control running scan tasks
+- **Rescan Capability**: Ability to retrigger specific scan types
+- **Batch Processing**: Handle up to 300 targets per batch in custom scans
 
 ## Installation
 
@@ -34,57 +42,76 @@ PRETTYRECON_PASSWORD=your_password
 
 ## Usage
 
-### Basic Scan
-```bash
-python main.py -t example.com -st basic -o
-```
+### Basic Commands
 
-### Full Scan
+1. Full Reconnaissance Scan:
 ```bash
 python main.py -t example.com -st all -o
 ```
+Performs complete scanning including subdomains, DNS, ports, URLs, and vulnerabilities.
 
-### Subdomain Only Scan
+2. Basic Scan:
 ```bash
-python main.py -t example.com -st sub -o
+python main.py -t example.com -st basic -o
 ```
+Performs basic reconnaissance including subdomains, DNS records, ports, and wayback URLs.
 
-### Vulnerability Scan
+3. Vulnerability-focused Scan:
 ```bash
 python main.py -t example.com -st vuln -o
 ```
+Focuses on security aspects including vulnerabilities, exposed secrets, and CVEs.
 
-### Custom Subdomain Scan
+4. Subdomain-only Scan:
 ```bash
-python main.py -cscn subdomains.txt
+python main.py -t example.com -st sub -o
 ```
+Performs only subdomain enumeration.
 
-## Command Line Arguments
+### Advanced Usage
+
+1. Custom Subdomain Scan:
+```bash
+python main.py -cscn targets.txt
+```
+Process multiple targets from a file (up to 300 per batch).
+
+2. Retrigger Specific Scan:
+```bash
+python main.py -t example.com -st vuln -r
+```
+Restart a specific type of scan.
+
+### Command Line Arguments
 
 - `-t, --target`: Target domain to scan (e.g., example.com)
 - `-st, --scan_type`: Scan type (all/basic/vuln/sub)
 - `-o, --output`: Save results to JSON files
-- `-cscn, --customsubscan`: File containing custom subdomains to scan
+- `-cscn, --customsubscan`: File containing targets for custom subdomain scan
+- `-r, --rescan`: Retrigger scans for the specified type
 
-## Output
+## Output Files
 
 When using the `-o` flag, results are saved in the `output/<target>` directory:
 
 - `subdomains.json`: Discovered subdomains
-- `dnsinfo.json`: DNS information
-- `ports.json`: Open ports
-- `waybackurls.txt`: Historical URLs
-- `exposed_creds.json`: Exposed credentials
-- `misc_vulns.json`: Miscellaneous vulnerabilities
+- `dnsinfo.json`: DNS records and information
+- `ports.json`: Open ports and services
+- `waybackurls.json`: Historical URLs
+- `common_vulns.json`: Common vulnerabilities
+- `exposed_creds.json`: Exposed credentials/secrets
+- `cves.json`: Identified CVEs
 
 ## Error Handling
 
-The tool includes comprehensive error handling for:
-- Network issues
+The tool implements comprehensive error handling for:
+- Network connectivity issues
 - Authentication failures
-- Invalid input
-- File operations
-- API errors
+- Invalid input validation
+- File operation errors
+- API response errors
+- Session management
+- CSRF token handling
 
 ## Contributing
 
@@ -94,6 +121,12 @@ The tool includes comprehensive error handling for:
 4. Push to the branch
 5. Create a Pull Request
 
-## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+## Support
+
+For support, please open an issue in the GitHub repository.
+
+
+## Disclaimer
+
+Use this tool responsibly and only on systems you have permission to test. The authors are not responsible for any misuse or damage.
