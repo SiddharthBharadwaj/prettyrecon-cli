@@ -402,6 +402,63 @@ class PrettyReconScanner:
         except Exception as e:
             raise ScanError(f"Vulnerability scan failed: {str(e)}")
 
+    def _trigger_rescan(self, scan_path: str) -> None:
+        """Trigger a rescan for a specific scan type"""
+        try:
+            rescan_url = f"{self.base_url}/{scan_path}/"
+            csrf_token = self.session.cookies.get('csrftoken', '')
+            
+            # First visit the page to ensure proper session state
+            self.session.get(rescan_url, timeout=APIConfig.REQUEST_TIMEOUT)
+            
+            # Trigger the rescan
+            data = {
+                'csrfmiddlewaretoken': csrf_token,
+                'action': 'rescan'
+            }
+            headers = {
+                'Origin': APIConfig.BASE_URL,
+                'Referer': rescan_url,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            
+            response = self.session.post(
+                rescan_url,
+                data=data,
+                headers=headers,
+                timeout=APIConfig.REQUEST_TIMEOUT
+            )
+            
+            if response.ok:
+                print(f"{Colors.GREEN}Successfully triggered rescan for {scan_path}{Colors.ENDC}")
+            else:
+                print(f"{Colors.FAIL}Failed to trigger rescan for {scan_path}: {response.status_code}{Colors.ENDC}")
+            
+        except Exception as e:
+            print(f"{Colors.FAIL}Error triggering rescan for {scan_path}: {str(e)}{Colors.ENDC}")
+
+    def rescan(self) -> None:
+        """Retrigger scans based on scan type"""
+        print(f"{Colors.BOLD}Retriggering scans for type: {self.config.scan_type}...{Colors.ENDC}")
+        
+        # Define scan paths for each scan type
+        scan_type_paths = {
+            'sub': ['subdomains'],
+            'basic': ['subdomains', 'dns_scan', 'ports', 'wayback_urls'],
+            'vuln': ['subdomains', 'common_vulnerability', 'exposed_secrets', 'cves'],
+            'all': ['subdomains', 'dns_scan', 'ports', 'wayback_urls', 
+                    'common_vulnerability', 'exposed_secrets', 'cves']
+        }
+        
+        scan_paths = scan_type_paths.get(self.config.scan_type.lower(), [])
+        if not scan_paths:
+            raise ValidationError(f"Invalid scan type for rescan: {self.config.scan_type}")
+        
+        for scan_path in scan_paths:
+            self._trigger_rescan(scan_path)
+            time.sleep(2)  # Add delay between rescans
+
     def run(self) -> None:
         """Main execution flow"""
         try:
@@ -432,12 +489,16 @@ def main():
     parser.add_argument("-st", "--scan_type", help="all: Full scan, basic: Basic scan, vuln: Scan for vulns only, sub: Subdomains only")
     parser.add_argument("-o", "--output", help="Saves output to output/*.json file.", action='store_true')
     parser.add_argument("-cscn", "--customsubscan", help="For the CustomSubScan feature of PrettyRecon. Pass filename after flag.")
+    parser.add_argument("-r", "--rescan", help="Retrigger scans based on scan type", action='store_true')
     
     args = parser.parse_args()
     
     # Validate arguments
+    if not args.target and not args.customsubscan:
+        parser.error("Either -t/--target or -cscn/--customsubscan is required")
+        
     if args.target and not args.scan_type:
-        parser.error("Missing argument '-st/--scan_type'")
+        parser.error("Missing argument '-st/--scan_type' when using -t/--target")
         
     if args.target and not validators.domain(args.target):
         print(f"{Colors.FAIL}Invalid target format. Example: example.com [Without http(s) and '/']{Colors.ENDC}")
@@ -453,7 +514,12 @@ def main():
     
     # Initialize and run scanner
     scanner = PrettyReconScanner(config)
-    scanner.run()
+    
+    if args.rescan:
+        scanner.login()
+        scanner.rescan()
+    else:
+        scanner.run()
 
 if __name__ == '__main__':
     main()
