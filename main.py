@@ -643,6 +643,18 @@ class PrettyReconScanner:
         except Exception as e:
             raise ScanError(f"Custom subdomain scan failed: {str(e)}")
 
+    def subdomain_scan(self) -> None:
+        """Perform subdomain scan"""
+        try:
+            scan_paths = ['subdomains']
+            self._initialize_scans(scan_paths)
+            self._init_jobs(1)
+            if self.config.output:
+                self._monitor_jobs()
+                self._fetch_scan_data(scan_paths)
+        except Exception as e:
+            raise ScanError(f"Subdomain scan failed: {str(e)}")
+
     def run(self) -> None:
         """Main execution flow"""
         try:
